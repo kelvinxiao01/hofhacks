@@ -15,40 +15,40 @@ export async function insertText(text: string) {
   }
 }
 
-export async function readCell(address: string) {
+export async function readCell(address: string): Promise<string> {
   // Read text from a cell.
   try {
-    let result;
+    let result: string = "";
     await Excel.run(async (context) => {
       const sheet = context.workbook.worksheets.getActiveWorksheet();
       const range = sheet.getRange(address);
-      range.load("values");
+      range.load("formulas");
       await context.sync();
-      result = range.values[0][0];
-      console.log(`Value in ${address}: ${result}`);
+      result = range.formulas[0][0];
+      console.log(`Read formula from cell ${address}:`, result);
     });
     return result;
   } catch (error) {
-    console.log("Error: " + error);
-    return null;
+    console.error(`Error reading formula from cell ${address}:`, error);
+    throw error;
   }
 }
 
-export async function readRange(address: string) {
+export async function readRange(address: string): Promise<any[][]> {
   // Read values from a range.
   try {
-    let result;
+    let result: any[][] = [];
     await Excel.run(async (context) => {
       const sheet = context.workbook.worksheets.getActiveWorksheet();
       const range = sheet.getRange(address);
-      range.load("values");
+      range.load("formulas");
       await context.sync();
-      result = range.values;
-      console.log(`Values in ${address}:`, result);
+      result = range.formulas;
+      console.log(`Read formulas from range ${address}:`, result);
     });
     return result;
   } catch (error) {
-    console.log("Error: " + error);
-    return null;
+    console.error(`Error reading formulas from range ${address}:`, error);
+    throw error;
   }
 }

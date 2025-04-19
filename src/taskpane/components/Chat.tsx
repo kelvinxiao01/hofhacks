@@ -7,10 +7,10 @@ import { AIAgentResponse, ExcelAction } from "../services/ExcelActionProtocol";
 interface Message {
   id: string;
   content: string;
-  sender: 'user' | 'assistant';
+  sender: 'user' | 'assistant' | 'ai';
   timestamp: Date;
   action?: {
-    type: 'WRITE_CELL' | 'WRITE_RANGE' | 'READ_RANGE';
+    type: 'WRITE_CELL' | 'WRITE_RANGE' | 'READ_RANGE' | 'CREATE_PIVOT_TABLE';
     data?: any;
   };
   aiResponse?: AIAgentResponse;
@@ -24,6 +24,7 @@ const useStyles = makeStyles({
     height: "100%",
     padding: "16px",
     gap: "16px",
+    minWidth: "300px",
   },
   messagesContainer: {
     flex: 1,
@@ -31,12 +32,16 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     gap: "12px",
+    width: "100%",
   },
   message: {
     padding: "12px",
     borderRadius: "8px",
     maxWidth: "80%",
+    width: "auto",
+    wordBreak: "break-word",
     whiteSpace: "pre-wrap",
+    overflowWrap: "break-word",
   },
   userMessage: {
     backgroundColor: "#0078D4",
@@ -51,9 +56,11 @@ const useStyles = makeStyles({
   inputContainer: {
     display: "flex",
     gap: "8px",
+    width: "100%",
   },
   input: {
     flex: 1,
+    minWidth: "0",
   },
   statusContainer: {
     display: "flex",
@@ -61,6 +68,7 @@ const useStyles = makeStyles({
     alignItems: "center",
     fontSize: "12px",
     color: "#666",
+    width: "100%",
   },
   actionIndicator: {
     display: "flex",
@@ -69,6 +77,7 @@ const useStyles = makeStyles({
     fontSize: "12px",
     color: "#0078D4",
     marginTop: "4px",
+    flexWrap: "wrap",
   },
   dataPreview: {
     marginTop: "8px",
@@ -78,6 +87,8 @@ const useStyles = makeStyles({
     fontSize: "12px",
     maxHeight: "100px",
     overflow: "auto",
+    width: "100%",
+    wordBreak: "break-word",
   },
   actionsList: {
     marginTop: "8px",
@@ -85,12 +96,14 @@ const useStyles = makeStyles({
     backgroundColor: "#E6E6E6",
     borderRadius: "4px",
     fontSize: "12px",
+    width: "100%",
   },
   actionItem: {
     marginBottom: "4px",
     padding: "4px",
     backgroundColor: "#D0D0D0",
     borderRadius: "4px",
+    wordBreak: "break-word",
   },
   messageBody: {
     marginTop: "8px",
@@ -98,6 +111,12 @@ const useStyles = makeStyles({
     backgroundColor: "#E6E6E6",
     borderRadius: "4px",
     fontSize: "12px",
+    width: "100%",
+    maxWidth: "100%",
+    boxSizing: "border-box",
+    wordBreak: "break-word",
+    whiteSpace: "pre-wrap",
+    overflowWrap: "break-word",
   },
 });
 
@@ -203,6 +222,9 @@ const Chat: React.FC = () => {
         break;
       case "READ_RANGE":
         actionText = `Read from range ${message.action.data.address}`;
+        break;
+      case "CREATE_PIVOT_TABLE":
+        actionText = "Created a pivot table";
         break;
       default:
         actionText = `Action: ${message.action.type}`;

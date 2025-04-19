@@ -6,6 +6,7 @@
  */
 
 import { ExcelService } from './ExcelService';
+import { PivotTableService } from './PivotTableService';
 import { 
   ExcelAction, 
   ExcelActionType, 
@@ -48,9 +49,9 @@ export class ExcelActionExecutor {
    * @param action The action to execute
    * @returns A promise that resolves when the action has been executed
    */
-  private async executeAction(action: ExcelAction): Promise<void> {
-    console.log(`Executing action: ${action.type}`, action);
-
+  public async executeAction(action: ExcelAction): Promise<void> {
+    console.log('Executing action:', action);
+    
     try {
       switch (action.type) {
         case ExcelActionType.WRITE_CELL:
@@ -66,7 +67,7 @@ export class ExcelActionExecutor {
           await this.executeReadRange(action.data);
           break;
         case ExcelActionType.CREATE_PIVOT_TABLE:
-          await this.executeCreatePivotTable(action.data as CreatePivotTableData);
+          await this.executeCreatePivotTable(action);
           break;
         case ExcelActionType.INSERT_FORMULA:
           await this.executeInsertFormula(action.data as InsertFormulaData);
@@ -102,7 +103,7 @@ export class ExcelActionExecutor {
           await this.executeCustomAction(action.data);
           break;
         default:
-          console.warn(`Unknown action type: ${action.type}`);
+          console.warn(`Unsupported action type: ${action.type}`);
       }
     } catch (error) {
       console.error(`Error executing action ${action.type}:`, error);
@@ -162,12 +163,41 @@ export class ExcelActionExecutor {
 
   /**
    * Execute a create pivot table action
-   * @param data The data for the action
+   * @param action The action to execute
    */
-  private async executeCreatePivotTable(data: CreatePivotTableData): Promise<void> {
-    // Note: This would require extending the ExcelService to support creating pivot tables
-    // For now, we'll just log that creating a pivot table was requested
-    console.log('Creating pivot table:', data);
+  private async executeCreatePivotTable(action: ExcelAction): Promise<void> {
+    console.log('Creating pivot table with parameters:', action.data);
+    
+    try {
+      const { sourceRange, destinationRange, rows, columns, values } = action.data;
+      
+      // Validate the parameters
+      if (!sourceRange || !destinationRange) {
+        throw new Error('Source range and destination range are required for creating a pivot table');
+      }
+      
+      // Use the PivotTableService to create the pivot table
+      const pivotTableService = PivotTableService.getInstance();
+      await pivotTableService.createPivotTable({
+        name: "PivotTable",
+        sourceRange,
+        destinationRange,
+        rows,
+        columns,
+        values
+      });
+      
+      console.log('Pivot table created successfully');
+    } catch (error) {
+      console.error('Error creating pivot table:', error);
+      
+      // Provide a more user-friendly error message
+      if (error.message && error.message.includes('Source range and destination range are required')) {
+        throw new Error('Please specify both source and destination ranges for the pivot table');
+      } else {
+        throw new Error('Failed to create pivot table. Please check your parameters and try again.');
+      }
+    }
   }
 
   /**

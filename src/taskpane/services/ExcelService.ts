@@ -1,6 +1,9 @@
 import ExcelJS from 'exceljs';
 import { readCell, readRange } from '../taskpane';
 
+// Office.js is available globally in the Excel add-in environment
+declare const Excel: any;
+
 export interface ExcelRange {
   address: string;
   values: any[][];
@@ -250,6 +253,95 @@ export class ExcelService {
     if (this.autoSaveInterval) {
       clearInterval(this.autoSaveInterval);
       this.autoSaveInterval = null;
+    }
+  }
+
+  /**
+   * Create a pivot table in the current worksheet
+   * @param options The options for creating the pivot table
+   */
+  public async createPivotTable(options: {
+    name: string;
+    sourceRange: string;
+    destinationRange: string;
+    rows?: string[];
+    columns?: string[];
+    values?: Array<{ field: string; function?: string }>;
+  }): Promise<void> {
+    try {
+      console.log('Creating pivot table with options:', options);
+      
+      // Use Excel.run to create the pivot table
+      await Excel.run(async (context) => {
+        // Get the active worksheet
+        const worksheet = context.workbook.worksheets.getActiveWorksheet();
+        
+        // Create the pivot table
+        const pivotTable = worksheet.pivotTables.add(
+          options.name,
+          options.sourceRange,
+          options.destinationRange
+        );
+        
+        // Add row fields
+        if (options.rows && options.rows.length > 0) {
+          for (const row of options.rows) {
+            try {
+              const hierarchy = pivotTable.hierarchies.getItem(row);
+              pivotTable.rowHierarchies.add(hierarchy);
+            } catch (error) {
+              console.warn(`Could not add row field: ${row}`, error);
+            }
+          }
+        }
+        
+        // Add column fields
+        if (options.columns && options.columns.length > 0) {
+          for (const column of options.columns) {
+            try {
+              const hierarchy = pivotTable.hierarchies.getItem(column);
+              pivotTable.columnHierarchies.add(hierarchy);
+            } catch (error) {
+              console.warn(`Could not add column field: ${column}`, error);
+            }
+          }
+        }
+        
+        // Add value fields
+        if (options.values && options.values.length > 0) {
+          for (const value of options.values) {
+            try {
+              const hierarchy = pivotTable.hierarchies.getItem(value.field);
+              const dataHierarchy = pivotTable.dataHierarchies.add(hierarchy);
+              
+              // Set the summarization function (sum, count, average, etc.)
+              if (value.function) {
+                // Map the function string to the appropriate Excel.AggregationFunction
+                let aggregationFunction = Excel.AggregationFunction.sum;
+                if (value.function.toLowerCase() === 'count') {
+                  aggregationFunction = Excel.AggregationFunction.count;
+                } else if (value.function.toLowerCase() === 'average') {
+                  aggregationFunction = Excel.AggregationFunction.average;
+                } else if (value.function.toLowerCase() === 'max') {
+                  aggregationFunction = Excel.AggregationFunction.max;
+                } else if (value.function.toLowerCase() === 'min') {
+                  aggregationFunction = Excel.AggregationFunction.min;
+                }
+                
+                dataHierarchy.summarizeBy = aggregationFunction;
+              }
+            } catch (error) {
+              console.warn(`Could not add value field: ${value.field}`, error);
+            }
+          }
+        }
+        
+        await context.sync();
+        console.log('Pivot table created successfully');
+      });
+    } catch (error) {
+      console.error('Error creating pivot table:', error);
+      throw error;
     }
   }
 } 
