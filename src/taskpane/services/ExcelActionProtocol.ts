@@ -84,6 +84,12 @@ export interface AIAgentResponse {
   actions: ExcelAction[];
   
   /**
+   * Optional formatted body content to display in the chat
+   * This can be used for rich text, formatted tables, or other structured content
+   */
+  body?: string;
+  
+  /**
    * Optional metadata about the response
    */
   metadata?: {

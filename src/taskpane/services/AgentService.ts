@@ -8,6 +8,7 @@ export interface AgentResponse {
     type: 'WRITE_CELL' | 'WRITE_RANGE' | 'READ_RANGE';
     data?: any;
   };
+  body?: string;
 }
 
 export class AgentService {
@@ -46,12 +47,16 @@ export class AgentService {
         console.log('Worksheet retrieved:', worksheet.name);
         console.log('Worksheet data:', JSON.stringify(worksheet.ranges[0].values));
         
+        // Format the output in a nicer way
+        const formattedOutput = this.formatWorksheetOutput(worksheet.ranges[0].values);
+        
         return {
-          message: `Here's what I found in the worksheet "${worksheet.name}":\n${JSON.stringify(worksheet.ranges[0].values, null, 2)}`,
+          message: `Here's what I found in the worksheet "${worksheet.name}":`,
           action: {
             type: 'READ_RANGE',
             data: worksheet.ranges[0]
-          }
+          },
+          body: formattedOutput
         };
       } catch (error) {
         console.error('Error reading worksheet:', error);
@@ -170,6 +175,26 @@ export class AgentService {
     // In a real implementation, this would send the message to the AI agent
     // and wait for a response. For now, we'll simulate a response.
     
+    // Check for read commands
+    if (message.toLowerCase().includes('read') || message.toLowerCase().includes('show') || message.toLowerCase().includes('what')) {
+      try {
+        const worksheet = await this.excelService.getCurrentWorksheet();
+        const formattedOutput = this.formatWorksheetOutput(worksheet.ranges[0].values);
+        
+        return {
+          message: `Here's what I found in the worksheet "${worksheet.name}":`,
+          actions: [],
+          body: formattedOutput
+        };
+      } catch (error) {
+        console.error('Error reading worksheet:', error);
+        return {
+          message: `Error reading worksheet: ${error.message}`,
+          actions: []
+        };
+      }
+    }
+    
     // Example response for a pivot table request
     if (message.toLowerCase().includes('pivot table')) {
       return this.createPivotTableResponse();
@@ -275,5 +300,73 @@ export class AgentService {
 
   public async getSelectedRange(): Promise<ExcelRange> {
     return this.excelService.getSelectedRange();
+  }
+
+  /**
+   * Format the worksheet output in a nicer way
+   * @param values The values from the worksheet
+   * @returns A formatted string representation of the worksheet
+   */
+  private formatWorksheetOutput(values: any[][]): string {
+    if (!values || values.length === 0) {
+      return "The worksheet is empty.";
+    }
+
+    let output = "";
+    let hasContent = false;
+
+    // Process each row
+    values.forEach((row, rowIndex) => {
+      // Check if the row has any non-empty cells
+      const hasNonEmptyCells = row.some(cell => cell !== null && cell !== undefined && cell !== "");
+      
+      if (hasNonEmptyCells) {
+        hasContent = true;
+        
+        // Process each cell in the row
+        row.forEach((cell, colIndex) => {
+          // Skip empty cells
+          if (cell === null || cell === undefined || cell === "") {
+            return;
+          }
+          
+          // Convert column index to letter (0 = A, 1 = B, etc.)
+          const colLetter = this.getColumnLetter(colIndex);
+          const rowNumber = rowIndex + 1;
+          const cellAddress = `${colLetter}${rowNumber}`;
+          
+          // Format the cell value
+          let cellValue = cell;
+          if (typeof cell === 'object') {
+            cellValue = JSON.stringify(cell);
+          }
+          
+          output += `Cell ${cellAddress}: ${cellValue}\n`;
+        });
+      }
+    });
+
+    if (!hasContent) {
+      return "The worksheet is empty.";
+    }
+
+    return output;
+  }
+
+  /**
+   * Convert a column index to a letter (0 = A, 1 = B, etc.)
+   * @param index The column index
+   * @returns The column letter
+   */
+  private getColumnLetter(index: number): string {
+    let letter = '';
+    let temp = index;
+    
+    while (temp >= 0) {
+      letter = String.fromCharCode(65 + (temp % 26)) + letter;
+      temp = Math.floor(temp / 26) - 1;
+    }
+    
+    return letter;
   }
 } 

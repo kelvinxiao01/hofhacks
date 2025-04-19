@@ -14,6 +14,7 @@ interface Message {
     data?: any;
   };
   aiResponse?: AIAgentResponse;
+  body?: string;
 }
 
 const useStyles = makeStyles({
@@ -91,6 +92,13 @@ const useStyles = makeStyles({
     backgroundColor: "#D0D0D0",
     borderRadius: "4px",
   },
+  messageBody: {
+    marginTop: "8px",
+    padding: "8px",
+    backgroundColor: "#E6E6E6",
+    borderRadius: "4px",
+    fontSize: "12px",
+  },
 });
 
 const Chat: React.FC = () => {
@@ -123,22 +131,38 @@ const Chat: React.FC = () => {
       const localResponse = await agentService.processMessage(inputValue);
       console.log('Local response:', localResponse);
       
-      // Then, send the message to the AI agent
-      console.log('Sending message to AI agent...');
-      const aiResponse = await agentService.sendMessageToAIAgent(inputValue);
-      console.log('AI agent response:', aiResponse);
+      // For read operations, we don't need to send to the AI agent
+      const isReadOperation = inputValue.toLowerCase().includes('read') || 
+                             inputValue.toLowerCase().includes('show') || 
+                             inputValue.toLowerCase().includes('what');
       
-      // Process the AI agent response
-      console.log('Processing AI agent response...');
-      await agentService.processAIAgentResponse(aiResponse);
+      let aiResponse;
+      if (!isReadOperation) {
+        // Then, send the message to the AI agent
+        console.log('Sending message to AI agent...');
+        aiResponse = await agentService.sendMessageToAIAgent(inputValue);
+        console.log('AI agent response:', aiResponse);
+        
+        // Process the AI agent response
+        console.log('Processing AI agent response...');
+        await agentService.processAIAgentResponse(aiResponse);
+      } else {
+        // For read operations, use the local response as the AI response
+        aiResponse = {
+          message: localResponse.message,
+          actions: [],
+          body: localResponse.body
+        };
+      }
       
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: aiResponse.message || localResponse.message,
+        content: localResponse.message || aiResponse.message,
         sender: 'assistant',
         timestamp: new Date(),
         action: localResponse.action,
-        aiResponse: aiResponse
+        aiResponse: aiResponse,
+        body: localResponse.body || aiResponse.body
       };
 
       console.log('Adding assistant message:', assistantMessage);
@@ -195,6 +219,12 @@ const Chat: React.FC = () => {
   const renderDataPreview = (message: Message) => {
     if (!message.action || !message.action.data) return null;
 
+    // For read operations, we don't need to show the raw data preview
+    // since the message content already contains the formatted data
+    if (message.action.type === 'READ_RANGE') {
+      return null;
+    }
+
     return (
       <div className={styles.dataPreview}>
         <pre>{JSON.stringify(message.action.data, null, 2)}</pre>
@@ -230,7 +260,12 @@ const Chat: React.FC = () => {
               message.sender === "user" ? styles.userMessage : styles.assistantMessage
             }`}
           >
-            {message.content}
+            <div>{message.content}</div>
+            {message.body && (
+              <div className={styles.messageBody}>
+                <pre>{message.body}</pre>
+              </div>
+            )}
             {message.sender === "assistant" && renderActionIndicator(message)}
             {message.sender === "assistant" && renderDataPreview(message)}
             {message.sender === "assistant" && renderActionsList(message)}
