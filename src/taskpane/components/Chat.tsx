@@ -2,6 +2,11 @@ import * as React from "react";
 import { makeStyles, Input, Button, Text, Spinner } from "@fluentui/react-components";
 import { Send24Regular, Document24Regular, Save24Regular } from "@fluentui/react-icons";
 import { AgentService } from "../services/AgentService";
+import { PDFContent } from "../services/pdfService";
+
+interface ChatProps {
+  pdfContent: PDFContent | null;
+}
 
 interface Message {
   id: string;
@@ -82,7 +87,7 @@ const useStyles = makeStyles({
   },
 });
 
-const Chat: React.FC = () => {
+const Chat: React.FC<ChatProps> = ({ pdfContent }) => {
   const styles = useStyles();
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [inputValue, setInputValue] = React.useState("");
@@ -177,6 +182,18 @@ const Chat: React.FC = () => {
       </div>
     );
   };
+
+  React.useEffect(() => {
+    if (pdfContent) {
+      // Add a system message about the PDF being loaded
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        content: `PDF loaded successfully. Title: ${pdfContent.metadata.title || 'Untitled'}, Pages: ${pdfContent.numPages}`,
+        sender: 'assistant',
+        timestamp: new Date(),
+      }]);
+    }
+  }, [pdfContent]);
 
   return (
     <div className={styles.chatContainer}>
