@@ -2,6 +2,7 @@ import * as React from "react";
 import { makeStyles, Input, Button, Text, Spinner } from "@fluentui/react-components";
 import { Send24Regular, Document24Regular, Save24Regular } from "@fluentui/react-icons";
 import { AgentService } from "../services/AgentService";
+import { AIAgentResponse, ExcelAction } from "../services/ExcelActionProtocol";
 
 interface Message {
   id: string;
@@ -12,6 +13,7 @@ interface Message {
     type: 'WRITE_CELL' | 'WRITE_RANGE' | 'READ_RANGE';
     data?: any;
   };
+  aiResponse?: AIAgentResponse;
 }
 
 const useStyles = makeStyles({
@@ -48,37 +50,46 @@ const useStyles = makeStyles({
   inputContainer: {
     display: "flex",
     gap: "8px",
-    padding: "8px",
-    borderTop: "1px solid #E1E1E1",
   },
   input: {
     flex: 1,
   },
-  actionIndicator: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    fontSize: "12px",
-    color: "#666",
-    marginTop: "4px",
-  },
-  dataPreview: {
-    maxHeight: "200px",
-    overflow: "auto",
-    backgroundColor: "#F8F8F8",
-    padding: "8px",
-    borderRadius: "4px",
-    marginTop: "8px",
-    fontSize: "12px",
-  },
-  statusBar: {
+  statusContainer: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    fontSize: "12px",
+    color: "#666",
+  },
+  actionIndicator: {
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+    fontSize: "12px",
+    color: "#0078D4",
+    marginTop: "4px",
+  },
+  dataPreview: {
+    marginTop: "8px",
     padding: "8px",
-    backgroundColor: "#F8F8F8",
+    backgroundColor: "#E6E6E6",
     borderRadius: "4px",
     fontSize: "12px",
+    maxHeight: "100px",
+    overflow: "auto",
+  },
+  actionsList: {
+    marginTop: "8px",
+    padding: "8px",
+    backgroundColor: "#E6E6E6",
+    borderRadius: "4px",
+    fontSize: "12px",
+  },
+  actionItem: {
+    marginBottom: "4px",
+    padding: "4px",
+    backgroundColor: "#D0D0D0",
+    borderRadius: "4px",
   },
 });
 
@@ -100,25 +111,41 @@ const Chat: React.FC = () => {
       timestamp: new Date(),
     };
 
+    console.log('Sending user message:', inputValue);
     setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
     setIsProcessing(true);
     setStatus("Processing...");
 
     try {
-      const response = await agentService.processMessage(inputValue);
+      // First, try to process the message locally
+      console.log('Processing message locally...');
+      const localResponse = await agentService.processMessage(inputValue);
+      console.log('Local response:', localResponse);
+      
+      // Then, send the message to the AI agent
+      console.log('Sending message to AI agent...');
+      const aiResponse = await agentService.sendMessageToAIAgent(inputValue);
+      console.log('AI agent response:', aiResponse);
+      
+      // Process the AI agent response
+      console.log('Processing AI agent response...');
+      await agentService.processAIAgentResponse(aiResponse);
       
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: response.message,
+        content: aiResponse.message || localResponse.message,
         sender: 'assistant',
         timestamp: new Date(),
-        action: response.action
+        action: localResponse.action,
+        aiResponse: aiResponse
       };
 
+      console.log('Adding assistant message:', assistantMessage);
       setMessages((prev) => [...prev, assistantMessage]);
       setStatus("Ready");
     } catch (error) {
+      console.error('Error processing message:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: "Sorry, I encountered an error while processing your request. Please try again.",
@@ -133,7 +160,7 @@ const Chat: React.FC = () => {
   };
 
   const handleKeyPress = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       handleSendMessage();
     }
@@ -142,27 +169,24 @@ const Chat: React.FC = () => {
   const renderActionIndicator = (message: Message) => {
     if (!message.action) return null;
 
-    let icon = null;
     let actionText = "";
-
     switch (message.action.type) {
-      case 'WRITE_CELL':
-        icon = <Save24Regular />;
+      case "WRITE_CELL":
         actionText = `Written to cell ${message.action.data.address}`;
         break;
-      case 'WRITE_RANGE':
-        icon = <Save24Regular />;
+      case "WRITE_RANGE":
         actionText = `Written to range ${message.action.data.address}`;
         break;
-      case 'READ_RANGE':
-        icon = <Document24Regular />;
-        actionText = `Read from ${message.action.data.address}`;
+      case "READ_RANGE":
+        actionText = `Read from range ${message.action.data.address}`;
         break;
+      default:
+        actionText = `Action: ${message.action.type}`;
     }
 
     return (
       <div className={styles.actionIndicator}>
-        {icon}
+        <Document24Regular />
         <span>{actionText}</span>
       </div>
     );
@@ -178,44 +202,60 @@ const Chat: React.FC = () => {
     );
   };
 
-  return (
-    <div className={styles.chatContainer}>
-      <div className={styles.statusBar}>
-        <span>{status}</span>
-        {isProcessing && <Spinner size="tiny" />}
-      </div>
-      
-      <div className={styles.messagesContainer}>
-        {messages.map((message) => (
-          <div key={message.id}>
-            <div
-              className={`${styles.message} ${
-                message.sender === 'user' ? styles.userMessage : styles.assistantMessage
-              }`}
-            >
-              <Text>{message.content}</Text>
-            </div>
-            {renderActionIndicator(message)}
-            {renderDataPreview(message)}
+  const renderActionsList = (message: Message) => {
+    if (!message.aiResponse || !message.aiResponse.actions || message.aiResponse.actions.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className={styles.actionsList}>
+        <Text weight="semibold">Actions to perform:</Text>
+        {message.aiResponse.actions.map((action, index) => (
+          <div key={index} className={styles.actionItem}>
+            <Text weight="semibold">{action.type}</Text>
+            {action.description && <div>{action.description}</div>}
           </div>
         ))}
       </div>
-      
+    );
+  };
+
+  return (
+    <div className={styles.chatContainer}>
+      <div className={styles.messagesContainer}>
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={`${styles.message} ${
+              message.sender === "user" ? styles.userMessage : styles.assistantMessage
+            }`}
+          >
+            {message.content}
+            {message.sender === "assistant" && renderActionIndicator(message)}
+            {message.sender === "assistant" && renderDataPreview(message)}
+            {message.sender === "assistant" && renderActionsList(message)}
+          </div>
+        ))}
+      </div>
       <div className={styles.inputContainer}>
         <Input
           className={styles.input}
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyPress={handleKeyPress}
-          placeholder="Type your message... (e.g., 'Read the current worksheet' or 'Write value 42 to cell A1')"
+          placeholder="Ask me to help with Excel..."
           disabled={isProcessing}
         />
         <Button
           appearance="primary"
           icon={<Send24Regular />}
           onClick={handleSendMessage}
-          disabled={isProcessing}
+          disabled={isProcessing || !inputValue.trim()}
         />
+      </div>
+      <div className={styles.statusContainer}>
+        <Text>{status}</Text>
+        {isProcessing && <Spinner size="tiny" />}
       </div>
     </div>
   );
