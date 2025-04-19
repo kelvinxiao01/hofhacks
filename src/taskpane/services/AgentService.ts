@@ -1,4 +1,6 @@
 import { ExcelService, ExcelRange, ExcelWorksheet } from './ExcelService';
+import { ExcelActionExecutor } from './ExcelActionExecutor';
+import { AIAgentResponse, ExcelAction, ExcelActionType, WriteCellData, WriteRangeData } from './ExcelActionProtocol';
 
 export interface AgentResponse {
   message: string;
@@ -11,9 +13,11 @@ export interface AgentResponse {
 export class AgentService {
   private static instance: AgentService;
   private excelService: ExcelService;
+  private actionExecutor: ExcelActionExecutor;
 
   private constructor() {
     this.excelService = ExcelService.getInstance();
+    this.actionExecutor = ExcelActionExecutor.getInstance();
   }
 
   public static getInstance(): AgentService {
@@ -23,14 +27,25 @@ export class AgentService {
     return AgentService.instance;
   }
 
+  /**
+   * Process a message from the user and return a response
+   * @param message The message from the user
+   * @returns A promise that resolves to an AgentResponse
+   */
   public async processMessage(message: string): Promise<AgentResponse> {
     // Convert message to lowercase for easier matching
     const lowerMessage = message.toLowerCase();
+    console.log('Processing message:', message);
 
     // Check for read commands
     if (lowerMessage.includes('read') || lowerMessage.includes('show') || lowerMessage.includes('what')) {
+      console.log('Detected read command');
       try {
+        console.log('Getting current worksheet...');
         const worksheet = await this.excelService.getCurrentWorksheet();
+        console.log('Worksheet retrieved:', worksheet.name);
+        console.log('Worksheet data:', JSON.stringify(worksheet.ranges[0].values));
+        
         return {
           message: `Here's what I found in the worksheet "${worksheet.name}":\n${JSON.stringify(worksheet.ranges[0].values, null, 2)}`,
           action: {
@@ -39,6 +54,7 @@ export class AgentService {
           }
         };
       } catch (error) {
+        console.error('Error reading worksheet:', error);
         return {
           message: `Error reading worksheet: ${error.message}`
         };
@@ -127,6 +143,122 @@ export class AgentService {
                "- 'Write value 42 to cell A1'\n" +
                "- 'Write range A1:B3 values [[1,2],[3,4],[5,6]]'\n" +
                "- 'Show me what's in the selected range'"
+    };
+  }
+
+  /**
+   * Process a response from the AI agent and execute the actions
+   * @param response The response from the AI agent
+   * @returns A promise that resolves when all actions have been executed
+   */
+  public async processAIAgentResponse(response: AIAgentResponse): Promise<void> {
+    try {
+      // Execute all actions in the response
+      await this.actionExecutor.executeActions(response.actions);
+    } catch (error) {
+      console.error('Error executing AI agent actions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Process a message from the user and send it to the AI agent
+   * @param message The message from the user
+   * @returns A promise that resolves to an AIAgentResponse
+   */
+  public async sendMessageToAIAgent(message: string): Promise<AIAgentResponse> {
+    // In a real implementation, this would send the message to the AI agent
+    // and wait for a response. For now, we'll simulate a response.
+    
+    // Example response for a pivot table request
+    if (message.toLowerCase().includes('pivot table')) {
+      return this.createPivotTableResponse();
+    }
+    
+    // Example response for a chart request
+    if (message.toLowerCase().includes('chart')) {
+      return this.createChartResponse();
+    }
+    
+    // Example response for a formula request
+    if (message.toLowerCase().includes('formula')) {
+      return this.createFormulaResponse();
+    }
+    
+    // Default response
+    return {
+      message: "I understand you want to work with Excel. I'll help you with that.",
+      actions: []
+    };
+  }
+
+  /**
+   * Create a sample pivot table response
+   * @returns A sample AIAgentResponse for a pivot table
+   */
+  private createPivotTableResponse(): AIAgentResponse {
+    return {
+      message: "I'll create a pivot table for you based on the data in the current worksheet.",
+      actions: [
+        {
+          type: ExcelActionType.CREATE_PIVOT_TABLE,
+          description: "Create a pivot table from the data in the current worksheet",
+          data: {
+            sourceRange: "A1:D10",
+            destinationRange: "F1",
+            rows: ["Category"],
+            columns: ["Region"],
+            values: [
+              {
+                field: "Sales",
+                function: "sum"
+              }
+            ]
+          }
+        }
+      ]
+    };
+  }
+
+  /**
+   * Create a sample chart response
+   * @returns A sample AIAgentResponse for a chart
+   */
+  private createChartResponse(): AIAgentResponse {
+    return {
+      message: "I'll create a chart for you based on the data in the current worksheet.",
+      actions: [
+        {
+          type: ExcelActionType.CREATE_CHART,
+          description: "Create a column chart from the data in the current worksheet",
+          data: {
+            type: "column",
+            title: "Sales by Region",
+            dataRange: "A1:B5",
+            destinationRange: "D1:H10"
+          }
+        }
+      ]
+    };
+  }
+
+  /**
+   * Create a sample formula response
+   * @returns A sample AIAgentResponse for a formula
+   */
+  private createFormulaResponse(): AIAgentResponse {
+    return {
+      message: "I'll insert a formula for you in the current worksheet.",
+      actions: [
+        {
+          type: ExcelActionType.INSERT_FORMULA,
+          description: "Insert a SUM formula to calculate the total sales",
+          data: {
+            address: "B10",
+            formula: "=SUM(B2:B9)"
+          }
+        }
+      ]
     };
   }
 

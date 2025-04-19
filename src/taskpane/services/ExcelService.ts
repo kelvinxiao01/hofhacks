@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import { readCell, readRange } from '../taskpane';
 
 export interface ExcelRange {
   address: string;
@@ -33,32 +34,22 @@ export class ExcelService {
 
   private async initializeWorkbook(): Promise<void> {
     try {
+      console.log('Initializing workbook...');
       // Wait for Office.js to be ready
       await this.waitForOfficeJs();
+      console.log('Office.js is ready');
       
-      // Get the current document data
-      const documentData = await this.getCurrentDocumentData();
-      if (documentData) {
-        // Load the workbook from the document data
-        await this.loadWorkbookFromData(documentData);
-        this.startAutoSave();
-        this.isInitialized = true;
-        console.log('Workbook initialized successfully');
-      } else {
-        // If we can't get document data, create a new workbook
-        this.workbook = new ExcelJS.Workbook();
-        const worksheet = this.workbook.addWorksheet('Sheet1');
-        this.isInitialized = true;
-        this.startAutoSave();
-        console.log('Created new workbook');
-      }
+      // Create a new workbook
+      this.workbook = new ExcelJS.Workbook();
+      const worksheet = this.workbook.addWorksheet('Sheet1');
+      this.isInitialized = true;
+      console.log('Created new workbook');
     } catch (error) {
       console.error('Error initializing workbook:', error);
       // Create a new workbook as fallback
       this.workbook = new ExcelJS.Workbook();
       const worksheet = this.workbook.addWorksheet('Sheet1');
       this.isInitialized = true;
-      this.startAutoSave();
       console.log('Created new workbook after error');
     }
   }
@@ -79,119 +70,164 @@ export class ExcelService {
     });
   }
 
-  private getCurrentDocumentData(): Promise<ArrayBuffer | null> {
-    return new Promise((resolve) => {
-      if (Office && Office.context && Office.context.document) {
-        Office.context.document.getFileAsync(Office.FileType.Compressed, (result) => {
-          if (result.status === Office.AsyncResultStatus.Succeeded) {
-            const file = result.value;
-            file.getSliceAsync(0, (sliceResult) => {
-              if (sliceResult.status === Office.AsyncResultStatus.Succeeded) {
-                resolve(sliceResult.value.data);
-              } else {
-                console.warn('Failed to get file slice:', sliceResult.error);
-                resolve(null);
-              }
-            });
-          } else {
-            console.warn('Failed to get file:', result.error);
-            resolve(null);
-          }
-        });
-      } else {
-        console.warn('Office.js API not available');
-        resolve(null);
-      }
-    });
-  }
+  public async getCurrentWorksheet(): Promise<ExcelWorksheet> {
+    if (!this.isInitialized) {
+      console.log('Workbook not initialized, initializing now...');
+      await this.initializeWorkbook();
+    }
 
-  private async loadWorkbookFromData(data: ArrayBuffer): Promise<void> {
     try {
-      // Load the workbook from the ArrayBuffer
-      await this.workbook.xlsx.load(data);
-      console.log('Workbook loaded from document data');
-    } catch (error) {
-      console.error('Error loading workbook from data:', error);
-      throw error;
-    }
-  }
-
-  private startAutoSave(): void {
-    // Clear any existing interval
-    if (this.autoSaveInterval) {
-      clearInterval(this.autoSaveInterval);
-    }
-
-    // Set up a new interval for autosaving
-    this.autoSaveInterval = window.setInterval(() => {
-      this.autoSave();
-    }, this.autoSaveDelay);
-  }
-
-  private async autoSave(): Promise<void> {
-    if (this.isInitialized) {
-      try {
-        await this.saveWorkbookToOffice();
-        console.log('Workbook autosaved successfully');
-      } catch (error) {
-        console.error('Error autosaving workbook:', error);
-      }
-    }
-  }
-
-  private async saveWorkbookToOffice(): Promise<void> {
-    try {
-      // Get the workbook as a buffer
-      const buffer = await this.workbook.xlsx.writeBuffer();
+      console.log('Getting current worksheet using Office.js API...');
       
-      // Save the buffer back to the document
-      await this.saveBufferToOffice(buffer);
+      // Use the readRange function to get the worksheet data
+      const worksheetData = await readRange('A1:Z100');
+      console.log('Worksheet data retrieved:', worksheetData);
+      
+      // Create a worksheet object
+      const worksheet = this.workbook.getWorksheet(1) || this.workbook.addWorksheet('Sheet1');
+      
+      // Update the worksheet with the data from Office.js
+      this.updateWorksheetFromOfficeJsData(worksheet, worksheetData || []);
+      
+      // Get the used range
+      const usedRange = {
+        address: this.getWorksheetRange(worksheet),
+        values: [] as any[][]
+      };
+      
+      // Read values from the worksheet
+      console.log('Reading values from worksheet...');
+      worksheet.eachRow((row, rowNumber) => {
+        console.log(`Reading row ${rowNumber}, cell count: ${row.cellCount}`);
+        const rowValues = [] as any[];
+        row.eachCell((cell) => {
+          console.log(`Cell ${cell.address}: ${cell.value}`);
+          rowValues.push(cell.value);
+        });
+        usedRange.values.push(rowValues);
+      });
+      
+      console.log('Worksheet data:', JSON.stringify(usedRange.values));
+      return {
+        name: worksheet.name,
+        ranges: [usedRange]
+      };
     } catch (error) {
-      console.error('Error saving workbook to Office:', error);
+      console.error('Error getting current worksheet:', error);
+      throw error;
+    }
+  }
+  
+  private updateWorksheetFromOfficeJsData(worksheet: ExcelJS.Worksheet, data: any[][]): void {
+    // Clear the worksheet
+    worksheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        cell.value = null;
+      });
+    });
+    
+    // Update the worksheet with the data from Office.js
+    data.forEach((row, rowIndex) => {
+      row.forEach((value, colIndex) => {
+        const cell = worksheet.getCell(rowIndex + 1, colIndex + 1);
+        cell.value = value;
+      });
+    });
+  }
+
+  public async writeToCell(address: string, value: any): Promise<void> {
+    try {
+      console.log(`Writing value "${value}" to cell ${address} using Office.js API...`);
+      
+      // Use Office.js API to write to the cell
+      await Excel.run(async (context) => {
+        const sheet = context.workbook.worksheets.getActiveWorksheet();
+        const range = sheet.getRange(address);
+        range.values = [[value]];
+        await context.sync();
+      });
+      
+      console.log(`Successfully wrote value "${value}" to cell ${address}`);
+      
+      // Update the local workbook
+      if (!this.isInitialized) {
+        await this.initializeWorkbook();
+      }
+      
+      const worksheet = this.workbook.getWorksheet(1);
+      if (!worksheet) {
+        throw new Error('No worksheet found');
+      }
+      
+      const cell = worksheet.getCell(address);
+      cell.value = value;
+    } catch (error) {
+      console.error(`Error writing to cell ${address}:`, error);
       throw error;
     }
   }
 
-  private saveBufferToOffice(buffer: ArrayBuffer): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (Office && Office.context && Office.context.document) {
-        // Convert ArrayBuffer to base64
-        const bytes = new Uint8Array(buffer);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        const base64 = btoa(binary);
-        
-        // Save the workbook data using the document's save method
-        Office.context.document.settings.set('workbookData', base64);
-        Office.context.document.settings.saveAsync((result) => {
-          if (result.status === Office.AsyncResultStatus.Succeeded) {
-            resolve();
-          } else {
-            reject(new Error('Failed to save workbook'));
-          }
-        });
-      } else {
-        reject(new Error('Office.js API not available'));
+  public async writeToRange(address: string, values: any[][]): Promise<void> {
+    try {
+      console.log(`Writing values to range ${address} using Office.js API...`);
+      
+      // Use Office.js API to write to the range
+      await Excel.run(async (context) => {
+        const sheet = context.workbook.worksheets.getActiveWorksheet();
+        const range = sheet.getRange(address);
+        range.values = values;
+        await context.sync();
+      });
+      
+      console.log(`Successfully wrote values to range ${address}`);
+      
+      // Update the local workbook
+      if (!this.isInitialized) {
+        await this.initializeWorkbook();
       }
-    });
+      
+      const worksheet = this.workbook.getWorksheet(1);
+      if (!worksheet) {
+        throw new Error('No worksheet found');
+      }
+      
+      const [startCell, endCell] = address.split(':');
+      const startCol = worksheet.getColumn(startCell.replace(/[0-9]/g, ''));
+      const startRow = parseInt(startCell.replace(/[A-Z]/g, ''));
+      
+      values.forEach((row, rowIndex) => {
+        row.forEach((value, colIndex) => {
+          const cell = worksheet.getCell(startRow + rowIndex, startCol.number + colIndex);
+          cell.value = value;
+        });
+      });
+    } catch (error) {
+      console.error(`Error writing to range ${address}:`, error);
+      throw error;
+    }
   }
 
-  public async loadWorkbook(filePath: string): Promise<void> {
-    // This method is kept for compatibility but will use Office.js instead
+  public async getSelectedRange(): Promise<ExcelRange> {
     try {
-      const documentData = await this.getCurrentDocumentData();
-      if (documentData) {
-        await this.loadWorkbookFromData(documentData);
-        this.currentFilePath = filePath;
-        this.startAutoSave();
-        this.isInitialized = true;
-      } else {
-        throw new Error('Could not get document data');
-      }
+      console.log('Getting selected range using Office.js API...');
+      
+      // Use Office.js API to get the selected range
+      return new Promise((resolve) => {
+        Excel.run(async (context) => {
+          const range = context.workbook.getSelectedRange();
+          range.load('address, values');
+          
+          await context.sync();
+          console.log('Office.js API: Retrieved selected range:', range.address, range.values);
+          
+          resolve({
+            address: range.address,
+            values: range.values
+          });
+        });
+      });
     } catch (error) {
-      console.error('Error loading workbook:', error);
+      console.error('Error getting selected range:', error);
       throw error;
     }
   }
@@ -209,114 +245,6 @@ export class ExcelService {
     return `${startCell}:${endCell}`;
   }
 
-  public async getCurrentWorksheet(): Promise<ExcelWorksheet> {
-    if (!this.isInitialized) {
-      await this.initializeWorkbook();
-    }
-
-    const worksheet = this.workbook.getWorksheet(1); // Get first worksheet
-    if (!worksheet) {
-      throw new Error('No worksheet found');
-    }
-
-    const usedRange = {
-      address: this.getWorksheetRange(worksheet),
-      values: [] as any[][]
-    };
-
-    worksheet.eachRow((row) => {
-      const rowValues = [] as any[];
-      row.eachCell((cell) => {
-        rowValues.push(cell.value);
-      });
-      usedRange.values.push(rowValues);
-    });
-
-    return {
-      name: worksheet.name,
-      ranges: [usedRange]
-    };
-  }
-
-  public async writeToCell(address: string, value: any): Promise<void> {
-    if (!this.isInitialized) {
-      await this.initializeWorkbook();
-    }
-
-    const worksheet = this.workbook.getWorksheet(1);
-    if (!worksheet) {
-      throw new Error('No worksheet found');
-    }
-
-    const cell = worksheet.getCell(address);
-    cell.value = value;
-    
-    // Trigger autosave after writing
-    this.autoSave();
-  }
-
-  public async writeToRange(address: string, values: any[][]): Promise<void> {
-    if (!this.isInitialized) {
-      await this.initializeWorkbook();
-    }
-
-    const worksheet = this.workbook.getWorksheet(1);
-    if (!worksheet) {
-      throw new Error('No worksheet found');
-    }
-
-    const [startCell, endCell] = address.split(':');
-    const startCol = worksheet.getColumn(startCell.replace(/[0-9]/g, ''));
-    const startRow = parseInt(startCell.replace(/[A-Z]/g, ''));
-
-    values.forEach((row, rowIndex) => {
-      row.forEach((value, colIndex) => {
-        const cell = worksheet.getCell(startRow + rowIndex, startCol.number + colIndex);
-        cell.value = value;
-      });
-    });
-    
-    // Trigger autosave after writing
-    this.autoSave();
-  }
-
-  public async getSelectedRange(): Promise<ExcelRange> {
-    if (!this.isInitialized) {
-      await this.initializeWorkbook();
-    }
-
-    const worksheet = this.workbook.getWorksheet(1);
-    if (!worksheet) {
-      throw new Error('No worksheet found');
-    }
-
-    // In ExcelJS, we'll get the dimensions of the worksheet as the selected range
-    const range = {
-      address: this.getWorksheetRange(worksheet),
-      values: [] as any[][]
-    };
-
-    worksheet.eachRow((row) => {
-      const rowValues = [] as any[];
-      row.eachCell((cell) => {
-        rowValues.push(cell.value);
-      });
-      range.values.push(rowValues);
-    });
-
-    return range;
-  }
-
-  public async saveWorkbook(filePath: string): Promise<void> {
-    try {
-      await this.saveWorkbookToOffice();
-      this.currentFilePath = filePath;
-    } catch (error) {
-      console.error('Error saving workbook:', error);
-      throw error;
-    }
-  }
-  
   public dispose(): void {
     // Clear the autosave interval when the service is disposed
     if (this.autoSaveInterval) {
