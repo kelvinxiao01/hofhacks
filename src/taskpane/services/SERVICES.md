@@ -30,6 +30,7 @@ The `AgentService` is the central service that processes user messages and coord
 ### Output
 - A response object containing:
   - A message to display to the user (formatted for readability)
+  - A body field for structured content (e.g., formatted tables, rich text)
   - Actions to be performed in Excel
   - Metadata about the response
 
@@ -45,6 +46,7 @@ The AgentService now formats the output in a more user-friendly way:
 - Empty cells are skipped to reduce clutter
 - Complex objects are properly stringified
 - The output is formatted as a list of cells with their values
+- The formatted output is placed in the "body" field of the response
 
 ## ExcelService
 
@@ -114,6 +116,10 @@ The `ExcelActionProtocol` defines the protocol for communication between the bac
 
 ### Key Interfaces
 - `AIAgentResponse`: The structure of a response from the AI agent
+  - `message`: A message to display to the user
+  - `body`: Optional formatted body content to display in the chat
+  - `actions`: A list of actions to perform
+  - `metadata`: Optional metadata about the response
 - `ExcelAction`: A single action to be performed in Excel
 - `ExcelActionType`: The types of actions that can be performed
 - Various data types for specific actions (e.g., `WriteCellData`, `WriteRangeData`)
@@ -161,4 +167,5 @@ ExcelService -> Excel (via Office.js API)
 - **Error Handling**: Improved error handling throughout the services to provide better feedback to users.
 - **Debugging**: Added comprehensive logging to help diagnose issues with Excel integration.
 - **Output Formatting**: Improved the formatting of read operations to show only populated cells in a user-friendly way.
-- **Read Operations**: Optimized read operations to avoid duplication and ensure the formatted output is properly displayed. 
+- **Read Operations**: Optimized read operations to avoid duplication and ensure the formatted output is properly displayed.
+- **Body Field**: Added support for a "body" field in the response to display structured content in the chat interface. 

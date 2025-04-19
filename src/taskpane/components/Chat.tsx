@@ -14,6 +14,7 @@ interface Message {
     data?: any;
   };
   aiResponse?: AIAgentResponse;
+  body?: string;
 }
 
 const useStyles = makeStyles({
@@ -91,6 +92,13 @@ const useStyles = makeStyles({
     backgroundColor: "#D0D0D0",
     borderRadius: "4px",
   },
+  messageBody: {
+    marginTop: "8px",
+    padding: "8px",
+    backgroundColor: "#E6E6E6",
+    borderRadius: "4px",
+    fontSize: "12px",
+  },
 });
 
 const Chat: React.FC = () => {
@@ -142,7 +150,8 @@ const Chat: React.FC = () => {
         // For read operations, use the local response as the AI response
         aiResponse = {
           message: localResponse.message,
-          actions: []
+          actions: [],
+          body: localResponse.body
         };
       }
       
@@ -152,7 +161,8 @@ const Chat: React.FC = () => {
         sender: 'assistant',
         timestamp: new Date(),
         action: localResponse.action,
-        aiResponse: aiResponse
+        aiResponse: aiResponse,
+        body: localResponse.body || aiResponse.body
       };
 
       console.log('Adding assistant message:', assistantMessage);
@@ -250,7 +260,12 @@ const Chat: React.FC = () => {
               message.sender === "user" ? styles.userMessage : styles.assistantMessage
             }`}
           >
-            {message.content}
+            <div>{message.content}</div>
+            {message.body && (
+              <div className={styles.messageBody}>
+                <pre>{message.body}</pre>
+              </div>
+            )}
             {message.sender === "assistant" && renderActionIndicator(message)}
             {message.sender === "assistant" && renderDataPreview(message)}
             {message.sender === "assistant" && renderActionsList(message)}

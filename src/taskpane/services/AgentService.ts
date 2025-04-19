@@ -8,6 +8,7 @@ export interface AgentResponse {
     type: 'WRITE_CELL' | 'WRITE_RANGE' | 'READ_RANGE';
     data?: any;
   };
+  body?: string;
 }
 
 export class AgentService {
@@ -50,11 +51,12 @@ export class AgentService {
         const formattedOutput = this.formatWorksheetOutput(worksheet.ranges[0].values);
         
         return {
-          message: `Here's what I found in the worksheet "${worksheet.name}":\n\n${formattedOutput}`,
+          message: `Here's what I found in the worksheet "${worksheet.name}":`,
           action: {
             type: 'READ_RANGE',
             data: worksheet.ranges[0]
-          }
+          },
+          body: formattedOutput
         };
       } catch (error) {
         console.error('Error reading worksheet:', error);
@@ -180,8 +182,9 @@ export class AgentService {
         const formattedOutput = this.formatWorksheetOutput(worksheet.ranges[0].values);
         
         return {
-          message: `Here's what I found in the worksheet "${worksheet.name}":\n\n${formattedOutput}`,
-          actions: []
+          message: `Here's what I found in the worksheet "${worksheet.name}":`,
+          actions: [],
+          body: formattedOutput
         };
       } catch (error) {
         console.error('Error reading worksheet:', error);
