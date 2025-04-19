@@ -20,14 +20,16 @@ The `AgentService` is the central service that processes user messages and coord
 ### Process
 1. Receives a message from the user
 2. Processes the message to determine the user's intent
-3. Sends the message to the AI agent backend (currently simulated)
-4. Receives a response from the AI agent
-5. Processes the AI agent's response to extract actions
-6. Executes the actions using the ExcelActionExecutor
+3. For read operations, directly reads from Excel and formats the output
+4. For other operations, sends the message to the AI agent backend (currently simulated)
+5. Receives a response from the AI agent
+6. Processes the AI agent's response to extract actions
+7. Executes the actions using the ExcelActionExecutor
+8. Formats the output in a user-friendly way
 
 ### Output
 - A response object containing:
-  - A message to display to the user
+  - A message to display to the user (formatted for readability)
   - Actions to be performed in Excel
   - Metadata about the response
 
@@ -35,6 +37,14 @@ The `AgentService` is the central service that processes user messages and coord
 - `processMessage(message: string)`: Processes a user message and returns a response
 - `sendMessageToAIAgent(message: string)`: Sends a message to the AI agent and receives a response
 - `processAIAgentResponse(response: AIAgentResponse)`: Processes a response from the AI agent and executes the actions
+- `formatWorksheetOutput(values: any[][])`: Formats worksheet data in a user-friendly way
+
+### Output Formatting
+The AgentService now formats the output in a more user-friendly way:
+- For read operations, it shows only populated cells with their addresses and values
+- Empty cells are skipped to reduce clutter
+- Complex objects are properly stringified
+- The output is formatted as a list of cells with their values
 
 ## ExcelService
 
@@ -126,12 +136,13 @@ ExcelService -> Excel (via Office.js API)
 
 1. The user sends a message through the chat interface (`Chat.tsx`).
 2. The message is processed by the `AgentService`.
-3. The `AgentService` sends the message to the AI agent backend.
-4. The AI agent backend returns a response in the format defined by `ExcelActionProtocol`.
-5. The `AgentService` processes the response and passes the actions to the `ExcelActionExecutor`.
-6. The `ExcelActionExecutor` executes the actions using the `ExcelService`.
-7. The `ExcelService` performs the operations in Excel using the Office.js API.
-8. The results are displayed to the user through the chat interface.
+3. For read operations, the `AgentService` directly reads from Excel and formats the output.
+4. For other operations, the `AgentService` sends the message to the AI agent backend.
+5. The AI agent backend returns a response in the format defined by `ExcelActionProtocol`.
+6. The `AgentService` processes the response and passes the actions to the `ExcelActionExecutor`.
+7. The `ExcelActionExecutor` executes the actions using the `ExcelService`.
+8. The `ExcelService` performs the operations in Excel using the Office.js API.
+9. The results are displayed to the user through the chat interface in a formatted way.
 
 ### Example Flow
 
@@ -148,4 +159,6 @@ ExcelService -> Excel (via Office.js API)
 - **ExcelService**: Updated to use the Office.js API directly for reading and writing data from Excel, improving reliability and performance.
 - **Taskpane Integration**: Added helper functions in taskpane.ts for common Excel operations, making the code more modular and maintainable.
 - **Error Handling**: Improved error handling throughout the services to provide better feedback to users.
-- **Debugging**: Added comprehensive logging to help diagnose issues with Excel integration. 
+- **Debugging**: Added comprehensive logging to help diagnose issues with Excel integration.
+- **Output Formatting**: Improved the formatting of read operations to show only populated cells in a user-friendly way.
+- **Read Operations**: Optimized read operations to avoid duplication and ensure the formatted output is properly displayed. 
